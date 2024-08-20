@@ -1,28 +1,36 @@
 const express = require('express');
-const app = express();
+const morgan = require('morgan');
 const companiesRoutes = require('./routes/companies');
 const invoicesRoutes = require('./routes/invoices');
-const db = require('./db');
+const industriesRoutes = require('./routes/industries');
 
-app.use(express.json()); // Middleware to parse JSON bodies
+const app = express();
 
-// Use routes
+// Middleware
+app.use(morgan('dev'));
+app.use(express.json());
+
+// Routes
 app.use('/companies', companiesRoutes);
 app.use('/invoices', invoicesRoutes);
+app.use('/industries', industriesRoutes);
 
-// Handle 404 errors
-app.use((req, res) => {
-  res.status(404).json({ error: 'Not Found' });
+// Error Handling
+app.use((req, res, next) => {
+  const err = new Error('Not Found');
+  err.status = 404;
+  next(err);
 });
 
-// Global error handler
 app.use((err, req, res, next) => {
-  console.error(err.stack);
-  res.status(500).json({ error: 'Internal Server Error' });
+  res.status(err.status || 500);
+  res.json({
+    error: {
+      message: err.message,
+      ...(process.env.NODE_ENV === 'development' && { stack: err.stack })
+    }
+  });
 });
 
-const PORT = process.env.PORT || 3000;
-app.listen(PORT, () => {
-  console.log(`Server running on port ${PORT}`);
-});
+module.exports = app;
 

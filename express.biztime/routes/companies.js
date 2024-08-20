@@ -1,8 +1,12 @@
 const express = require('express');
-const router = new express.Router();
+const slugify = require('slugify');
 const db = require('../db');
+const router = new express.Router();
 
-// GET /companies - Return a list of companies
+// Middleware to parse JSON
+router.use(express.json());
+
+// GET /companies - List all companies
 router.get('/', async (req, res, next) => {
   try {
     const result = await db.query('SELECT code, name FROM companies');
@@ -12,20 +16,30 @@ router.get('/', async (req, res, next) => {
   }
 });
 
-// GET /companies/:code - Return a single company
+// GET /companies/:code - Get details of a specific company
 router.get('/:code', async (req, res, next) => {
   try {
     const { code } = req.params;
-    const result = await db.query(
+
+    const companyResult = await db.query(
       'SELECT code, name, description FROM companies WHERE code = $1',
       [code]
     );
 
-    if (result.rows.length === 0) {
+    if (companyResult.rows.length === 0) {
       return res.status(404).json({ error: 'Company not found' });
     }
 
-    return res.json({ company: result.rows[0] });
+    const company = companyResult.rows[0];
+
+    const industriesResult = await db.query(
+      'SELECT i.code, i.industry FROM industries i JOIN company_industries ci ON i.code = ci.industry_code WHERE ci.company_code = $1',
+      [code]
+    );
+
+    company.industries = industriesResult.rows;
+
+    return res.json({ company });
   } catch (err) {
     return next(err);
   }
@@ -34,7 +48,9 @@ router.get('/:code', async (req, res, next) => {
 // POST /companies - Add a new company
 router.post('/', async (req, res, next) => {
   try {
-    const { code, name, description } = req.body;
+    const { name, description } = req.body;
+    const code = slugify(name, { lower: true, strict: true });
+
     const result = await db.query(
       'INSERT INTO companies (code, name, description) VALUES ($1, $2, $3) RETURNING code, name, description',
       [code, name, description]
@@ -46,7 +62,7 @@ router.post('/', async (req, res, next) => {
   }
 });
 
-// PUT /companies/:code - Edit an existing company
+// PUT /companies/:code - Update a company's details
 router.put('/:code', async (req, res, next) => {
   try {
     const { code } = req.params;
@@ -72,10 +88,7 @@ router.delete('/:code', async (req, res, next) => {
   try {
     const { code } = req.params;
 
-    const result = await db.query(
-      'DELETE FROM companies WHERE code = $1 RETURNING code',
-      [code]
-    );
+    const result = await db.query('DELETE FROM companies WHERE code = $1 RETURNING code', [code]);
 
     if (result.rows.length === 0) {
       return res.status(404).json({ error: 'Company not found' });
@@ -88,5 +101,6 @@ router.delete('/:code', async (req, res, next) => {
 });
 
 module.exports = router;
+
 
   
